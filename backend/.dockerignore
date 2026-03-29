@@ -1,6 +1,0 @@
-node_modules
-npm-debug.log
-.env
-*.py
-check_*.js
-compare_*.js
