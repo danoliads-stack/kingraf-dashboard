@@ -1,0 +1,147 @@
+{
+  "name": "Kingraf - Importar Producao do Excel",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "node-manual-trigger",
+      "name": "Iniciar Importacao",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [180, 300]
+    },
+    {
+      "parameters": {
+        "fileSelector": "/data/kingraf/producao.xlsx"
+      },
+      "id": "node-read-file",
+      "name": "Ler Arquivo Excel",
+      "type": "n8n-nodes-base.readBinaryFiles",
+      "typeVersion": 1,
+      "position": [400, 300]
+    },
+    {
+      "parameters": {
+        "operation": "fromFile",
+        "options": {
+          "headerRow": true,
+          "sheetName": "Producao",
+          "includeEmptyRows": false
+        }
+      },
+      "id": "node-parse-excel",
+      "name": "Processar Excel",
+      "type": "n8n-nodes-base.spreadsheetFile",
+      "typeVersion": 2,
+      "position": [620, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id, nome, setor FROM operadores WHERE ativo = true",
+        "options": {}
+      },
+      "id": "node-get-operadores",
+      "name": "Buscar Operadores",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [840, 300],
+      "credentials": {
+        "postgres": {
+          "id": "CONFIGURE_POSTGRES_CREDENTIALS",
+          "name": "Supabase Kingraf"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Pega todos os operadores do banco\nconst operadores = $('Buscar Operadores').all().map(item => item.json);\n\n// Pega todas as linhas do Excel\nconst linhas = $('Processar Excel').all();\n\n// Normaliza texto para comparação\nconst norm = s => String(s || '')\n  .toLowerCase()\n  .normalize('NFD')\n  .replace(/[\\u0300-\\u036f]/g, '')\n  .replace(/\\s+/g, ' ')\n  .trim();\n\n// Converte número no formato brasileiro\nconst parseBR = s => {\n  if (!s && s !== 0) return 0;\n  s = String(s).replace(/%/g, '').trim();\n  if (!s) return 0;\n  if (s.startsWith(',')) s = '0' + s;\n  if (s.includes(',')) {\n    s = s.replace(/\\./g, '').replace(',', '.');\n  } else if (/^\\d{1,3}(\\.\\d{3})+$/.test(s)) {\n    s = s.replace(/\\./g, '');\n  }\n  return parseFloat(s) || 0;\n};\n\n// Meses abreviados\nconst MESES = { jan:1, fev:2, mar:3, abr:4, mai:5, jun:6, jul:7, ago:8, set:9, out:10, nov:11, dez:12 };\n\nconst resultado = [];\nconst erros = [];\n\nfor (const linha of linhas) {\n  const row = linha.json;\n\n  // Pula linhas vazias\n  const operadorNome = String(row['Operador'] || row['operador'] || '').trim();\n  if (!operadorNome) continue;\n\n  // Descobre o mês (aceita número 1-12 ou abreviatura)\n  let mes = parseInt(row['Mes'] || row['mes'] || row['Mês'] || 0);\n  if (!mes) {\n    const mesStr = String(row['Mes'] || row['mes'] || row['Mês'] || '').toLowerCase().substring(0, 3);\n    mes = MESES[mesStr] || 0;\n  }\n  if (!mes || mes < 1 || mes > 12) {\n    erros.push({ linha: operadorNome, erro: 'Mês inválido: ' + (row['Mes'] || row['mes']) });\n    continue;\n  }\n\n  const ano = parseInt(row['Ano'] || row['ano'] || new Date().getFullYear());\n\n  // Faz match do operador\n  const normNome = norm(operadorNome);\n  const op = operadores.find(o => {\n    const normOp = norm(o.nome);\n    const primeiroNomePDF = normNome.split(' ')[0];\n    const ultimoNomePDF  = normNome.split(' ').pop();\n    const primeiroNomeDB = normOp.split(' ')[0];\n    return normNome.includes(normOp)\n      || normOp.includes(normNome)\n      || (primeiroNomePDF === primeiroNomeDB && normNome.includes(ultimoNomePDF) && normOp.includes(ultimoNomePDF));\n  });\n\n  if (!op) {\n    erros.push({ linha: operadorNome, erro: 'Operador não encontrado no banco' });\n    continue;\n  }\n\n  resultado.push({\n    json: {\n      operador_id:        op.id,\n      operador_nome:      op.nome,\n      ano,\n      mes,\n      giros_totais:       parseBR(row['Giros Totais']       || row['giros_totais']),\n      giros_bons:         parseBR(row['Giros Bons']         || row['giros_bons']),\n      h_produtivas:       parseBR(row['H Produtivas']       || row['H.Produtivas']  || row['h_produtivas']),\n      h_acerto:           parseBR(row['H Acerto']           || row['H.Acerto']      || row['h_acerto']),\n      h_improdutivas:     parseBR(row['H Improdutivas']     || row['H.Improd']      || row['h_improdutivas']),\n      velocidade_media:   parseBR(row['Velocidade Media']   || row['Velocidade Média'] || row['velocidade_media']),\n      qtd_acertos:        parseBR(row['Qtd Acertos']        || row['qtd_acertos']),\n      desperdicio_acerto: parseBR(row['Desp Acerto']        || row['Desperdicio Acerto'] || row['desperdicio_acerto']),\n      desperdicio_virando:parseBR(row['Desp Virando']       || row['Desperdicio Virando'] || row['desperdicio_virando']),\n    }\n  });\n}\n\nif (erros.length) {\n  console.log('Linhas com erro:', JSON.stringify(erros));\n}\n\nconsole.log(`Processados: ${resultado.length} registros, Erros: ${erros.length}`);\nreturn resultado;\n"
+      },
+      "id": "node-processar",
+      "name": "Processar e Mapear Operadores",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1060, 300]
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "producao",
+          "mode": "list"
+        },
+        "conflictTarget": "operador_id, ano, mes",
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "operador_id":         "={{ $json.operador_id }}",
+            "ano":                 "={{ $json.ano }}",
+            "mes":                 "={{ $json.mes }}",
+            "giros_totais":        "={{ $json.giros_totais }}",
+            "giros_bons":          "={{ $json.giros_bons }}",
+            "h_produtivas":        "={{ $json.h_produtivas }}",
+            "h_acerto":            "={{ $json.h_acerto }}",
+            "h_improdutivas":      "={{ $json.h_improdutivas }}",
+            "velocidade_media":    "={{ $json.velocidade_media }}",
+            "qtd_acertos":         "={{ $json.qtd_acertos }}",
+            "desperdicio_acerto":  "={{ $json.desperdicio_acerto }}",
+            "desperdicio_virando": "={{ $json.desperdicio_virando }}",
+            "atualizado_em":       "={{ new Date().toISOString() }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "node-salvar-supabase",
+      "name": "Salvar no Supabase",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [1280, 300],
+      "credentials": {
+        "postgres": {
+          "id": "CONFIGURE_POSTGRES_CREDENTIALS",
+          "name": "Supabase Kingraf"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst total = items.length;\nconsole.log(`✅ ${total} registros salvos com sucesso!`);\nreturn [{ json: { status: 'ok', total_importados: total, timestamp: new Date().toISOString() } }];\n"
+      },
+      "id": "node-resultado",
+      "name": "Resultado",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1500, 300]
+    }
+  ],
+  "connections": {
+    "Iniciar Importacao": {
+      "main": [[{ "node": "Ler Arquivo Excel", "type": "main", "index": 0 }]]
+    },
+    "Ler Arquivo Excel": {
+      "main": [[{ "node": "Processar Excel", "type": "main", "index": 0 }]]
+    },
+    "Processar Excel": {
+      "main": [[{ "node": "Buscar Operadores", "type": "main", "index": 0 }]]
+    },
+    "Buscar Operadores": {
+      "main": [[{ "node": "Processar e Mapear Operadores", "type": "main", "index": 0 }]]
+    },
+    "Processar e Mapear Operadores": {
+      "main": [[{ "node": "Salvar no Supabase", "type": "main", "index": 0 }]]
+    },
+    "Salvar no Supabase": {
+      "main": [[{ "node": "Resultado", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [{ "name": "kingraf" }]
+}

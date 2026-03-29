@@ -1,0 +1,33 @@
+# Dependências
+node_modules/
+frontend/node_modules/
+backend/node_modules/
+
+# Variáveis de ambiente (NUNCA versionar)
+.env
+backend/.env
+frontend/.env
+*.env.local
+
+# Build
+frontend/dist/
+backend/dist/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Sistema
+.DS_Store
+Thumbs.db
+
+# Scripts de debug/teste local
+backend/importar_pdfs.py
+backend/check_*.js
+backend/compare_*.js
+debug_*.js
+test_pdf*.js
+build_workflow.py
+
+# Temporários
+*.tmp

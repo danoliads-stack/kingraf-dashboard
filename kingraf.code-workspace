@@ -1,0 +1,64 @@
+{
+  "folders": [
+    { "name": "Kingraf Dashboard", "path": "." }
+  ],
+  "settings": {
+    "editor.formatOnSave": true,
+    "editor.tabSize": 2,
+    "files.exclude": {
+      "**/node_modules": true,
+      "**/.git": true
+    },
+    "emmet.includeLanguages": { "javascript": "javascriptreact" }
+  },
+  "extensions": {
+    "recommendations": [
+      "dbaeumer.vscode-eslint",
+      "esbenp.prettier-vscode",
+      "bradlc.vscode-tailwindcss",
+      "ms-vscode.vscode-typescript-next",
+      "ckolkman.vscode-postgres"
+    ]
+  },
+  "launch": {
+    "version": "0.2.0",
+    "configurations": [
+      {
+        "name": "Backend (Node.js)",
+        "type": "node",
+        "request": "launch",
+        "program": "${workspaceFolder}/backend/src/server.js",
+        "envFile": "${workspaceFolder}/backend/.env",
+        "restart": true,
+        "runtimeExecutable": "nodemon",
+        "console": "integratedTerminal"
+      }
+    ]
+  },
+  "tasks": {
+    "version": "2.0.0",
+    "tasks": [
+      {
+        "label": "Iniciar Backend",
+        "type": "shell",
+        "command": "cd backend && npm run dev",
+        "group": "build",
+        "presentation": { "panel": "dedicated", "reveal": "always" }
+      },
+      {
+        "label": "Iniciar Frontend",
+        "type": "shell",
+        "command": "cd frontend && npm run dev",
+        "group": "build",
+        "presentation": { "panel": "dedicated", "reveal": "always" }
+      },
+      {
+        "label": "Rodar Migrations",
+        "type": "shell",
+        "command": "cd backend && npm run migrate",
+        "group": "build",
+        "presentation": { "panel": "shared", "reveal": "always" }
+      }
+    ]
+  }
+}
